@@ -1,106 +1,80 @@
 import requests
 import time
-def getprices():
 
-    response = requests.get('https://api.livecoin.net/exchange/ticker?currencyPair=BTC/USD')
-    #print(response.content)
-    m=response.content
-    #print(type(m))
-    #print(len(m))
-    S=''
-    for i in range(0,len(m),1):
-        S=S+chr(m[i])
-    #print(S)
+isvaluable=['NO','NO','NO','NO']
+pairL=['','BTC/USD','ETH/USD','LTC/USD']
+pairP=['','USDT_BTC','USDT_ETH','USDT_LTC']
+pairvalue=[0,0,0,0]
+def getprices(npair):
+    response = requests.get('https://api.livecoin.net/exchange/ticker?currencyPair='+pairL[npair])
+    m = response.json()
 
-    bb1=S.find('best_bid":',0,len(m))
-    bb2=S.find(',',bb1,len(m))
+    bestbid1 = m['best_bid']
+    bestask1 = m['best_ask']
 
-    #print(bb1+10)
-    bestbid=float(S[bb1+10:bb2:1])
-    #print(bestbid)
+    response = requests.get('https://poloniex.com/public?command=returnTicker')
+    m = response.json()
 
-    ba1=S.find('best_ask":',0,len(m))
-    ba2=S.find('}',bb1,len(m))
+    bestbid2 = float(m[pairP[npair]]['highestBid'])
+    bestask2 = float(m[pairP[npair]]['lowestAsk'])
 
-    #print(ba1+10)
-    bestask=float(S[ba1+10:ba2:1])
-    #print(bestask)
-    #
+    bid1 = bestbid1
+    ask1 = bestask1
+    bid2 = bestbid2
+    ask2 = bestask2
+    return bid1, ask1, bid2, ask2
 
 
-    response = requests.get('https://api.exmo.com/v1/ticker/')
-    ##print(response.content)
-    m=response.content
-    #print(type(m))
-
-
-    S=''
-    for i in range(0,len(m),1):
-        S=S+chr(m[i])
-    #print(S)
-    btcusd=S.find('BTC_USDT',0,len(m))
-    #print(btcusd)
-    bp1=S.find('buy_price":"',btcusd,len(m))
-    bp2=S.find('",',bp1,len(m))
-
-    #print(S[bb1+11:bb2:1])
-    buyprice=float(S[bp1+12:bp2:1])
-   # print(buyprice)
-
-    sp1=S.find('sell_price":"',btcusd,len(m))
-    sp2=S.find('",',sp1,len(m))
-
-    #print(ba1+10)
-    sellprice=float(S[sp1+13:sp2:1])
-   # print(sellprice)
-    bid1 = bestbid
-    ask1 = bestask
-    bid2 = buyprice
-    ask2 = sellprice
-    return bid1,ask1,bid2,ask2
-
-def check():
-    bid1,ask1,bid2,ask2=getprices()
-    #print(bid1,ask1,bid2,ask2)
-    arbitrage='NO'
-    if ((bid1/ask2)>1.01):
-        arbitrage='EXMO'
-    elif ((bid2/ask1)>1.01):
+def check(npair):
+    bid1, ask1, bid2, ask2 = getprices(npair)
+    value=0
+    value1 = bid1 / ask2
+    value2 = bid2 / ask1
+    arbitrage = False
+    if value1>1.015:
+        value=value1
         arbitrage='LIVE'
-    else:
-        arbitrage = 'NO'
-        return arbitrage
+    if value2 > 1.015:
+        value = value2
+        arbitrage = 'POLO'
+
+    return arbitrage, value
+
+
+
 
 import telebot
-token='554253191:AAFDkj6jfMdq3LJ0HgkI2wk3CxmgP5OL7-M'
-
+token = '554253191:AAFDkj6jfMdq3LJ0HgkI2wk3CxmgP5OL7-M'
 bot = telebot.TeleBot(token)
-
 CHANNEL_NAME = '@moneygunforme'
 
-def SendMessage(arbitrage):
-    bid1, ask1, bid2, ask2 = getprices()
-    profitL=(bid1/ask2-1)*100
-    profitE = (bid2 / ask1-1)*100
+isvaluable0=['NO','NO','NO','NO']
+def SendMessage():
+    for np in range(1, 3 + 1, 1):
+        isvaluable0[np]=isvaluable[np]
+    print(isvaluable0, isvaluable)
 
-    if (arbitrage=='NO'):
-        bot.send_message(CHANNEL_NAME, 'BTC/USD \nPrepare to close all positions!')
-    if (arbitrage=='LIVE'):
-        bot.send_message(CHANNEL_NAME, 'BTC/USD \nBUY on LiveCoin, SELL on EXMO \n Estimated profit: '+str(profitL))
-    if (arbitrage=='EXMO'):
-        bot.send_message(CHANNEL_NAME, 'BTC/USD \nBUY on EXMO, SELL on LiveCoin \n Estimated profit: '+str(profitE))
+    for np in range(1,3+1,1):
+        arbitrage,value=check(np)
+        pairvalue[np]=value
+        isvaluable[np]=arbitrage
+        print(isvaluable0, isvaluable)
+
+    if (not (isvaluable0==isvaluable)):
+        S=''
+        S='Valuable pairs is available:'
+        for np in range(1, 3 + 1, 1):
+            if ( not (isvaluable[np]=='NO')):
+                S+='\n'+pairL[np]+' - profit: '+str(round(pairvalue[np],5))+', buy on '+isvaluable[np]
+
+        bot.send_message(CHANNEL_NAME, S)
+    else:
+        print('no changes',isvaluable0,isvaluable,pairvalue)
     time.sleep(1)
 
-
-a2='NO'
-
-iteration = 0;
-bot.send_message(CHANNEL_NAME, 'Bot Started!')
-while (True):
-    time.sleep(10)
-    a1=check()
-    if (not a1==a2):
-        SendMessage(a1)
-    a2=a1
-    iteration+=1;
-    print(iteration)
+bot.send_message(CHANNEL_NAME, 'Bot Started')
+while True:
+    #try:
+    SendMessage()
+    #except BaseException:
+    #    print('Error, check log')
